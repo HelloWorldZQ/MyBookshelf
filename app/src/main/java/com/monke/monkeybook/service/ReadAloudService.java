@@ -273,6 +273,17 @@ public class ReadAloudService extends Service {
         }
     }
 
+    public void toTTSSetting() {
+        //跳转到文字转语音设置界面
+        try {
+            Intent intent = new Intent();
+            intent.setAction("com.android.settings.TTS_SETTINGS");
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        } catch (Exception ignored) {
+        }
+    }
+
     private void initSpeechRate() {
         if (speechRate != preference.getInt("speechRate", 10) && !preference.getBoolean("speechRateFollowSys", true)) {
             speechRate = preference.getInt("speechRate", 10);
@@ -495,6 +506,10 @@ public class ReadAloudService extends Service {
                 int result = textToSpeech.setLanguage(Locale.CHINA);
                 if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                     mainHandler.post(() -> Toast.makeText(ReadAloudService.this, getString(R.string.tts_fix), Toast.LENGTH_SHORT).show());
+                    //先停止朗读服务方便用户设置好后的重试
+                    ReadAloudService.stop(ReadAloudService.this);
+                    //跳转到文字转语音设置界面
+                    toTTSSetting();
                 } else {
                     textToSpeech.setOnUtteranceProgressListener(new ttsUtteranceListener());
                     ttsInitSuccess = true;
@@ -516,7 +531,7 @@ public class ReadAloudService extends Service {
         public void onStart(String s) {
             updateMediaSessionPlaybackState();
             RxBus.get().post(RxBusTag.READ_ALOUD_START, readAloudNumber + 1);
-            RxBus.get().post(RxBusTag.READ_ALOUD_NUMBER, readAloudNumber);
+            RxBus.get().post(RxBusTag.READ_ALOUD_NUMBER, readAloudNumber + 1);
         }
 
         @Override

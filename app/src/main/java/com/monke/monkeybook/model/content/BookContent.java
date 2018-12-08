@@ -1,23 +1,24 @@
 package com.monke.monkeybook.model.content;
 
 import android.text.TextUtils;
-import android.util.SparseArray;
 
+import com.monke.monkeybook.MApplication;
+import com.monke.monkeybook.R;
 import com.monke.monkeybook.bean.BaseChapterBean;
 import com.monke.monkeybook.bean.BookContentBean;
 import com.monke.monkeybook.bean.BookSourceBean;
 import com.monke.monkeybook.bean.ChapterListBean;
 import com.monke.monkeybook.dao.ChapterListBeanDao;
 import com.monke.monkeybook.dao.DbHelper;
-import com.monke.monkeybook.model.analyzeRule.AnalyzeElement;
+import com.monke.monkeybook.model.analyzeRule.AnalyzeByJSonPath;
+import com.monke.monkeybook.model.analyzeRule.AnalyzeByJSoup;
+import com.monke.monkeybook.model.analyzeRule.AnalyzeByXPath;
 import com.monke.monkeybook.model.analyzeRule.AnalyzeHeaders;
 import com.monke.monkeybook.model.impl.IHttpGetApi;
 import com.monke.monkeybook.utils.StringUtils;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,8 @@ class BookContent {
     private BookSourceBean bookSourceBean;
     private String ruleBookContent;
     private boolean isAJAX;
+    private AnalyzeByXPath analyzeByXPath;
+    private AnalyzeByJSoup analyzeByJSoup;
 
     BookContent(String tag, BookSourceBean bookSourceBean) {
         this.tag = tag;
@@ -45,6 +48,11 @@ class BookContent {
         return Observable.create(e -> {
             if (TextUtils.isEmpty(s)) {
                 e.onError(new Throwable("内容获取失败"));
+                e.onComplete();
+                return;
+            }
+            if (ruleBookContent.startsWith("@") && !MApplication.getInstance().getDonateHb()) {
+                e.onError(new Throwable(MApplication.getInstance().getString(R.string.donate_s)));
                 e.onComplete();
                 return;
             }
@@ -86,61 +94,48 @@ class BookContent {
                     }
                 }
             }
-
             e.onNext(bookContentBean);
             e.onComplete();
         });
     }
 
-    private String getLib99Content(Document doc) {
-        if (doc == null) return "";
-        StringBuilder builder = new StringBuilder();
-        SparseArray textArray = new SparseArray();
-        String[] clients = StringUtils.base64Decode(doc.select("meta[name=client]").attr("content")).split("[A-Z]+%");
-        Element content = doc.getElementById("content");
-        content.select("abbr,bdi,command,details,figure,footer,keygen,mark,acronym,bdo,big,cite,code,dfn,kbd,q,s,samp,strike,tt,u,var,site").remove();
-        content.select("br").after("\n").remove();
-        int star = 0;
-        Elements childNotes = content.children();
-        for (int i = 0, size = childNotes.size(); i < size; i++) {
-            if (childNotes.get(i).tagName().equals("h2")) {
-                star = i + 1;
-            }
-            if (childNotes.get(i).tagName().equals("div") && !childNotes.get(i).className().equals("chapter")) {
-                break;
-            }
-        }
-        int j = 0;
-        for (int i = 0, size = clients.length; i < size; i++) {
-            int item = Integer.parseInt(clients[i]);
-            if (item < 3) {
-                textArray.append(item, childNotes.get(i + star).wholeText());
-                j++;
-            } else {
-                textArray.append(item - j, childNotes.get(i + star).wholeText());
-                j += 2;
-            }
-        }
-        for (int i = 0, size = textArray.size(); i < size; i++) {
-            builder.append(textArray.valueAt(i)).append("\n");
-        }
-        return builder.toString();
-    }
-
     private WebContentBean analyzeBookContent(final String s, final String chapterUrl) {
         WebContentBean webContentBean = new WebContentBean();
-        Document doc = Jsoup.parse(s);
-        if (chapterUrl.matches("^https?://(www\\.)?99lib\\.net/.*")) {
-            webContentBean.content = getLib99Content(doc);
-            webContentBean.nextUrl = "";
-        } else {
-            AnalyzeElement analyzeElement = new AnalyzeElement(doc, chapterUrl);
-            webContentBean.content = analyzeElement.getResult(ruleBookContent);
+        if (!StringUtils.isJSONType(s)) {
+            Document doc = Jsoup.parse(s);
+            analyzeByJSoup = new AnalyzeByJSoup(doc, chapterUrl);
+            analyzeByXPath = new AnalyzeByXPath(doc);
+            webContentBean.content = analyzeToString(ruleBookContent);
             if (!TextUtils.isEmpty(bookSourceBean.getRuleContentUrlNext())) {
-                webContentBean.nextUrl = analyzeElement.getResultUrl(bookSourceBean.getRuleContentUrlNext());
+                webContentBean.nextUrl = analyzeToString(bookSourceBean.getRuleContentUrlNext(), chapterUrl);
             }
+        } else {
+            AnalyzeByJSonPath analyzeByJSonPath = new AnalyzeByJSonPath(s);
+            SourceRule sourceRule = new SourceRule(ruleBookContent);
+            webContentBean.content = analyzeByJSonPath.read(sourceRule.rule);
         }
         return webContentBean;
+    }
+
+    private String analyzeToString(String rule) {
+        return analyzeToString(rule, null);
+    }
+
+    private String analyzeToString(String rule, String baseUrl) {
+        SourceRule sourceRule = new SourceRule(rule);
+        String result;
+        switch (sourceRule.mode) {
+            case XPath:
+                result = analyzeByXPath.getString(sourceRule.rule, baseUrl);
+                break;
+            default:
+                if (TextUtils.isEmpty(baseUrl)) {
+                    result = analyzeByJSoup.getResult(sourceRule.rule);
+                } else {
+                    result = analyzeByJSoup.getResultUrl(sourceRule.rule);
+                }
+        }
+        return result;
     }
 
     private class WebContentBean {

@@ -50,9 +50,10 @@ import com.monke.monkeybook.view.popupwindow.ReadBottomMenu;
 import com.monke.monkeybook.view.popupwindow.ReadInterfacePop;
 import com.monke.monkeybook.widget.modialog.EditBookmarkView;
 import com.monke.monkeybook.widget.modialog.MoDialogHUD;
-import com.monke.monkeybook.widget.page.Enum;
 import com.monke.monkeybook.widget.page.PageLoader;
 import com.monke.monkeybook.widget.page.PageView;
+import com.monke.monkeybook.widget.page.TxtChapter;
+import com.monke.monkeybook.widget.page.animation.PageAnimation;
 import com.monke.mprogressbar.MHorProgressBar;
 
 import java.util.List;
@@ -126,6 +127,7 @@ public class ReadBookActivity extends MBaseActivity<ReadBookContract.Presenter> 
 
     private Boolean showCheckPermission = false;
     private boolean autoPage = false;
+    private boolean aloudNextPage;
 
     @Override
     protected ReadBookContract.Presenter initInjector() {
@@ -518,7 +520,7 @@ public class ReadBookActivity extends MBaseActivity<ReadBookContract.Presenter> 
             @Override
             public void upPageMode() {
                 if (mPageLoader != null) {
-                    mPageLoader.setPageMode(readBookControl.getPageMode(readBookControl.getPageMode()));
+                    mPageLoader.setPageMode(PageAnimation.Mode.getPageMode(readBookControl.getPageMode()));
                 }
             }
 
@@ -653,8 +655,8 @@ public class ReadBookActivity extends MBaseActivity<ReadBookContract.Presenter> 
                         llMenuBottom.getReadProgress().setMaxProgress(Math.max(0, count - 1));
                         llMenuBottom.getReadProgress().setDurProgress(0);
                         // 如果处于错误状态，那么就冻结使用
-                        if (mPageLoader.getPageStatus() == Enum.PageStatus.LOADING
-                                || mPageLoader.getPageStatus() == Enum.PageStatus.ERROR) {
+                        if (mPageLoader.getPageStatus() == TxtChapter.Status.LOADING
+                                || mPageLoader.getPageStatus() == TxtChapter.Status.ERROR) {
                             llMenuBottom.getReadProgress().setEnabled(false);
                         } else {
                             llMenuBottom.getReadProgress().setEnabled(true);
@@ -849,7 +851,7 @@ public class ReadBookActivity extends MBaseActivity<ReadBookContract.Presenter> 
         if (mPresenter.getBookShelf() != null) {
             moDialogHUD.showChangeSource(mPresenter.getBookShelf(), searchBookBean -> {
                 if (!Objects.equals(searchBookBean.getNoteUrl(), mPresenter.getBookShelf().getNoteUrl())) {
-                    mPageLoader.setStatus(Enum.PageStatus.CHANGE_SOURCE);
+                    mPageLoader.setStatus(TxtChapter.Status.CHANGE_SOURCE);
                     mPresenter.changeBookSource(searchBookBean);
                 }
             });
@@ -972,6 +974,7 @@ public class ReadBookActivity extends MBaseActivity<ReadBookContract.Presenter> 
     }
 
     private void readAloud() {
+        aloudNextPage = false;
         if (mPresenter.getBookShelf() != null && mPageLoader != null) {
             ReadAloudService.play(ReadBookActivity.this,
                     false,
@@ -1053,6 +1056,7 @@ public class ReadBookActivity extends MBaseActivity<ReadBookContract.Presenter> 
 
     @Override
     public void readAloudStart(int start) {
+        aloudNextPage = true;
         if (mPageLoader != null) {
             mPageLoader.readAloudStart(start);
         }
@@ -1060,7 +1064,7 @@ public class ReadBookActivity extends MBaseActivity<ReadBookContract.Presenter> 
 
     @Override
     public void readAloudLength(int readAloudLength) {
-        if (mPageLoader != null) {
+        if (mPageLoader != null && aloudNextPage) {
             mPageLoader.readAloudLength(readAloudLength);
         }
     }

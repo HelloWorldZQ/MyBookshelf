@@ -13,6 +13,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
+
 import static android.text.TextUtils.isEmpty;
 
 /**
@@ -20,11 +24,12 @@ import static android.text.TextUtils.isEmpty;
  * 书源规则解析
  */
 
-public class AnalyzeElement {
+public class AnalyzeByJSoup {
+    private ScriptEngine engine = new ScriptEngineManager().getEngineByName("rhino");
     private String baseURL;
     private Element element;
 
-    public AnalyzeElement(Element element, String baseURL) {
+    public AnalyzeByJSoup(Element element, String baseURL) {
         this.element = element;
         this.baseURL = baseURL;
     }
@@ -181,6 +186,8 @@ public class AnalyzeElement {
                             elementsByText = filterElements(elementsByText, filterRules);
                         elements.addAll(elementsByText);
                         break;
+                    default:
+                        elements.addAll(temp.select(rulePcx[0]));
                 }
                 if (rulePcx.length > 1) {
                     String[] rulePcs = rulePcx[1].split(":");
@@ -211,21 +218,13 @@ public class AnalyzeElement {
         if (isEmpty(ruleStr)) {
             return null;
         }
-        String regex = null;
-        String replacement = "";
         String result = "";
         //分离正则表达式
-        String[] ruleStrS = ruleStr.trim().split("#");
-        if (ruleStrS.length > 1) {
-            regex = ruleStrS[1];
-        }
-        if (ruleStrS.length > 2 && !isEmpty(ruleStrS[2])) {
-            replacement = ruleStrS[2];
-        }
-        if (isEmpty(ruleStrS[0])) {
+        SourceRule sourceRule = splitSourceRule(ruleStr.trim());
+        if (isEmpty(sourceRule.elementsRule)) {
             result = element.data();
         } else {
-            List<String> textS = getAllResultList(ruleStrS[0]);
+            List<String> textS = getAllResultList(sourceRule.elementsRule);
             if (textS.size() == 0) {
                 return null;
             }
@@ -245,19 +244,34 @@ public class AnalyzeElement {
                 result = content.toString();
             }
         }
-        if (!isEmpty(regex)) {
-            assert regex != null;
-            result = result.replaceAll(regex, replacement);
+        if (!isEmpty(sourceRule.replaceRegex)) {
+            result = result.replaceAll(sourceRule.replaceRegex, sourceRule.replacement);
         }
         return result.trim();
     }
 
+    /**
+     * 获取一个字符串
+     **/
     public String getResultUrl(String ruleStr) {
-        List<String> urlList = getAllResultList(ruleStr);
+        String result = "";
+        SourceRule sourceRule = splitSourceRule(ruleStr);
+        List<String> urlList = getAllResultList(sourceRule.elementsRule);
         if (urlList.size() > 0) {
-            return urlList.get(0);
+            result = urlList.get(0);
         }
-        return null;
+        if (!TextUtils.isEmpty(sourceRule.replaceRegex)) {
+            result = result.replaceAll(sourceRule.replaceRegex, sourceRule.replacement);
+        }
+        if (!TextUtils.isEmpty(sourceRule.jsStr)) {
+            try {
+                engine.put("result", result);
+                result = (String) engine.eval(sourceRule.jsStr);
+            } catch (ScriptException e) {
+                e.printStackTrace();
+            }
+        }
+        return result;
     }
 
     /**
@@ -268,26 +282,19 @@ public class AnalyzeElement {
         if (isEmpty(ruleStr)) {
             return textS;
         }
-        String regex = null;
-        String replacement = "";
         //分离正则表达式
-        String[] ruleStrS = ruleStr.trim().split("#");
-        if (ruleStrS.length > 1) {
-            regex = ruleStrS[1];
-        }
-        if (ruleStrS.length > 2 && !isEmpty(ruleStrS[2])) {
-            replacement = ruleStrS[2];
-        }
-        if (isEmpty(ruleStrS[0])) {
+        SourceRule sourceRule = splitSourceRule(ruleStr);
+        if (isEmpty(sourceRule.elementsRule)) {
             textS.add(element.data());
         } else {
             boolean isAnd;
-            if (ruleStrS[0].contains("&")) {
+            String ruleStrS[];
+            if (sourceRule.elementsRule.contains("&")) {
                 isAnd = true;
-                ruleStrS = ruleStrS[0].split("&");
+                ruleStrS = sourceRule.elementsRule.split("&");
             } else {
                 isAnd = false;
-                ruleStrS = ruleStrS[0].split("\\|");
+                ruleStrS = sourceRule.elementsRule.split("\\|");
             }
             for (String ruleStrX : ruleStrS) {
                 List<String> temp = getResultList(ruleStrX);
@@ -299,12 +306,11 @@ public class AnalyzeElement {
                 }
             }
         }
-        if (!isEmpty(regex)) {
+        if (!isEmpty(sourceRule.replaceRegex)) {
             List<String> tempList = new ArrayList<>(textS);
             textS.clear();
             for (String text : tempList) {
-                assert regex != null;
-                text = text.replaceAll(regex, replacement);
+                text = text.replaceAll(sourceRule.replaceRegex, sourceRule.replacement);
                 if (text.length() > 0) {
                     textS.add(text);
                 }
@@ -407,5 +413,32 @@ public class AnalyzeElement {
         return textS;
     }
 
-}
+    private SourceRule splitSourceRule(String ruleStr) {
+        SourceRule sourceRule = new SourceRule();
+        String[] ruleStrS;
+        //分离JS
+        ruleStrS = ruleStr.trim().split("@js:");
+        if (ruleStrS.length > 1) {
+            sourceRule.jsStr = ruleStrS[1];
+        }
+        //分离正则表达式
+        ruleStrS = ruleStrS[0].trim().split("#");
+        sourceRule.elementsRule = ruleStrS[0];
+        if (ruleStrS.length > 1) {
+            sourceRule.replaceRegex = ruleStrS[1];
+        }
+        if (ruleStrS.length > 2) {
+            sourceRule.replacement = ruleStrS[2];
+        }
 
+        return sourceRule;
+    }
+
+    class SourceRule {
+        String elementsRule = "";
+        String replaceRegex = "";
+        String replacement = "";
+        String jsStr;
+    }
+
+}

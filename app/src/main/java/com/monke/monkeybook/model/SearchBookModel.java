@@ -12,12 +12,9 @@ import com.monke.monkeybook.R;
 import com.monke.monkeybook.bean.BookShelfBean;
 import com.monke.monkeybook.bean.BookSourceBean;
 import com.monke.monkeybook.bean.SearchBookBean;
-import com.monke.monkeybook.help.ACache;
-import com.monke.monkeybook.model.source.My716;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -46,12 +43,10 @@ public class SearchBookModel {
     private int searchSuccessNum;
     private CompositeDisposable compositeDisposable;
     private OnSearchListener searchListener;
-    private boolean useMy716;
 
-    public SearchBookModel(Context context, OnSearchListener searchListener, boolean useMy716) {
+    public SearchBookModel(Context context, OnSearchListener searchListener) {
         this.context = context;
         this.searchListener = searchListener;
-        this.useMy716 = useMy716;
         SharedPreferences preference = MApplication.getInstance().getConfigPreferences();
         threadsNum = preference.getInt(this.context.getString(R.string.pk_threads_num), 6);
         executorService = Executors.newFixedThreadPool(threadsNum);
@@ -65,12 +60,6 @@ public class SearchBookModel {
      */
     public void initSearchEngineS(@NonNull List<BookSourceBean> sourceBeanList) {
         searchEngineS.clear();
-        if (Objects.equals(ACache.get(context).getAsString("getZfbHb"), "True") && useMy716) {
-            SearchEngine my716 = new SearchEngine();
-            my716.setTag(My716.TAG);
-            my716.setHasMore(true);
-            searchEngineS.add(my716);
-        }
         for (BookSourceBean bookSourceBean : sourceBeanList) {
             if (bookSourceBean.getEnable()) {
                 SearchEngine se = new SearchEngine();
@@ -227,11 +216,6 @@ public class SearchBookModel {
 
     public void setPage(int page) {
         this.page = page;
-    }
-
-    public void setUseMy716(boolean useMy716) {
-        this.useMy716 = useMy716;
-        initSearchEngineS(BookSourceManager.getSelectedBookSource());
     }
 
     public interface OnSearchListener {

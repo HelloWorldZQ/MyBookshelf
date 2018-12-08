@@ -2,12 +2,16 @@ package com.monke.monkeybook.model.content;
 
 import android.text.TextUtils;
 
+import com.jayway.jsonpath.JsonPath;
 import com.monke.monkeybook.bean.BookShelfBean;
 import com.monke.monkeybook.bean.BookSourceBean;
 import com.monke.monkeybook.bean.ChapterListBean;
-import com.monke.monkeybook.model.analyzeRule.AnalyzeElement;
+import com.monke.monkeybook.model.analyzeRule.AnalyzeByJSonPath;
+import com.monke.monkeybook.model.analyzeRule.AnalyzeByJSoup;
+import com.monke.monkeybook.model.analyzeRule.AnalyzeByXPath;
 import com.monke.monkeybook.model.analyzeRule.AnalyzeHeaders;
 import com.monke.monkeybook.model.impl.IHttpGetApi;
+import com.monke.monkeybook.utils.StringUtils;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -26,6 +30,8 @@ import static android.text.TextUtils.isEmpty;
 class BookChapter {
     private String tag;
     private BookSourceBean bookSourceBean;
+    private AnalyzeByXPath analyzeByXPath;
+    private AnalyzeByJSoup analyzeByJSoup;
 
     BookChapter(String tag, BookSourceBean bookSourceBean) {
         this.tag = tag;
@@ -95,29 +101,82 @@ class BookChapter {
     private WebChapterBean<List<ChapterListBean>> analyzeChapterList(String s, String chapterUrl, String ruleChapterList) throws Exception {
         List<ChapterListBean> chapterBeans = new ArrayList<>();
         List<String> nextUrlList = new ArrayList<>();
-        Document doc = Jsoup.parse(s);
-        AnalyzeElement analyzeElement;
-        if (!TextUtils.isEmpty(bookSourceBean.getRuleChapterUrlNext())) {
-            analyzeElement = new AnalyzeElement(doc, chapterUrl);
-            nextUrlList = analyzeElement.getAllResultList(bookSourceBean.getRuleChapterUrlNext());
-        }
-        int thisUrlIndex = nextUrlList.indexOf(chapterUrl);
-        if (thisUrlIndex != -1) {
-            nextUrlList.remove(thisUrlIndex);
-        }
-        Elements elements = AnalyzeElement.getElements(doc, ruleChapterList);
-        for (Element element : elements) {
-            analyzeElement = new AnalyzeElement(element, chapterUrl);
-            ChapterListBean temp = new ChapterListBean();
-            temp.setDurChapterUrl(analyzeElement.getResultUrl(bookSourceBean.getRuleContentUrl()));   //id
-            temp.setDurChapterName(analyzeElement.getResult(bookSourceBean.getRuleChapterName()));
-            temp.setTag(tag);
-            if (!isEmpty(temp.getDurChapterUrl()) && !isEmpty(temp.getDurChapterName())) {
-                temp.setDurChapterIndex(chapterBeans.size());
+        SourceRule sourceRule;
+        if (!StringUtils.isJSONType(s)) {
+            Document doc = Jsoup.parse(s);
+            analyzeByXPath = new AnalyzeByXPath(doc);
+            if (!TextUtils.isEmpty(bookSourceBean.getRuleChapterUrlNext())) {
+                sourceRule = new SourceRule(bookSourceBean.getRuleChapterUrlNext());
+                switch (sourceRule.mode) {
+                    case XPath:
+                        nextUrlList = analyzeByXPath.getStringList(sourceRule.rule, chapterUrl);
+                        break;
+                    default:
+                        analyzeByJSoup = new AnalyzeByJSoup(doc, chapterUrl);
+                        nextUrlList = analyzeByJSoup.getAllResultList(sourceRule.rule);
+                }
+            }
+            int thisUrlIndex = nextUrlList.indexOf(chapterUrl);
+            if (thisUrlIndex != -1) {
+                nextUrlList.remove(thisUrlIndex);
+            }
+            Elements elements;
+            sourceRule = new SourceRule(ruleChapterList);
+            switch (sourceRule.mode) {
+                case XPath:
+                    elements = analyzeByXPath.getElements(sourceRule.rule);
+                    break;
+                default:
+                    elements = AnalyzeByJSoup.getElements(doc, sourceRule.rule);
+            }
+            for (Element element : elements) {
+                analyzeByJSoup = new AnalyzeByJSoup(element, chapterUrl);
+                analyzeByXPath = new AnalyzeByXPath(element.children());
+                ChapterListBean temp = new ChapterListBean();
+                temp.setTag(tag);
+                temp.setDurChapterName(analyzeToString(bookSourceBean.getRuleChapterName()));
+                temp.setDurChapterUrl(analyzeToString(bookSourceBean.getRuleContentUrl(), chapterUrl));
+                if (!isEmpty(temp.getDurChapterUrl()) && !isEmpty(temp.getDurChapterName())) {
+                    chapterBeans.add(temp);
+                }
+            }
+        } else {
+            AnalyzeByJSonPath analyzeByJSonPath = new AnalyzeByJSonPath(s);
+            sourceRule = new SourceRule(ruleChapterList);
+            List<Object> objects = JsonPath.read(s, sourceRule.rule);
+            for (Object object : objects) {
+                analyzeByJSonPath.parse(object);
+                ChapterListBean temp = new ChapterListBean();
+                temp.setTag(tag);
+                sourceRule = new SourceRule(bookSourceBean.getRuleChapterName());
+                temp.setDurChapterName(analyzeByJSonPath.read(sourceRule.rule));
+                sourceRule = new SourceRule(bookSourceBean.getRuleContentUrl());
+                temp.setDurChapterUrl(analyzeByJSonPath.read(sourceRule.rule));
                 chapterBeans.add(temp);
             }
         }
         return new WebChapterBean<>(chapterBeans, nextUrlList);
+    }
+
+    private String analyzeToString(String rule) {
+        return analyzeToString(rule, null);
+    }
+
+    private String analyzeToString(String rule, String baseUrl) {
+        SourceRule sourceRule = new SourceRule(rule);
+        String result;
+        switch (sourceRule.mode) {
+            case XPath:
+                result = analyzeByXPath.getString(sourceRule.rule, baseUrl);
+                break;
+            default:
+                if (TextUtils.isEmpty(baseUrl)) {
+                    result = analyzeByJSoup.getResult(sourceRule.rule);
+                } else {
+                    result = analyzeByJSoup.getResultUrl(sourceRule.rule);
+                }
+        }
+        return result;
     }
 
     private class WebChapterBean<T> {

@@ -17,13 +17,13 @@ import com.monke.monkeybook.utils.ScreenUtils;
 import com.monke.monkeybook.utils.SharedPreferencesUtil;
 import com.monke.monkeybook.utils.barUtil.ImmersionBar;
 import com.monke.monkeybook.view.activity.ReadBookActivity;
-import com.monke.monkeybook.widget.animation.CoverPageAnim;
-import com.monke.monkeybook.widget.animation.HorizonPageAnim;
-import com.monke.monkeybook.widget.animation.NonePageAnim;
-import com.monke.monkeybook.widget.animation.PageAnimation;
-import com.monke.monkeybook.widget.animation.ScrollPageAnim;
-import com.monke.monkeybook.widget.animation.SimulationPageAnim;
-import com.monke.monkeybook.widget.animation.SlidePageAnim;
+import com.monke.monkeybook.widget.page.animation.CoverPageAnim;
+import com.monke.monkeybook.widget.page.animation.HorizonPageAnim;
+import com.monke.monkeybook.widget.page.animation.NonePageAnim;
+import com.monke.monkeybook.widget.page.animation.PageAnimation;
+import com.monke.monkeybook.widget.page.animation.ScrollPageAnim;
+import com.monke.monkeybook.widget.page.animation.SimulationPageAnim;
+import com.monke.monkeybook.widget.page.animation.SlidePageAnim;
 
 import java.util.Objects;
 
@@ -115,7 +115,7 @@ public class PageView extends View {
     }
 
     //设置翻页的模式
-    void setPageMode(Enum.PageMode pageMode, int marginTop, int marginBottom) {
+    void setPageMode(PageAnimation.Mode pageMode, int marginTop, int marginBottom) {
         //视图未初始化的时候，禁止调用
         if (mViewWidth == 0 || mViewHeight == 0 || mPageLoader == null) return;
         if (!readBookControl.getHideStatusBar()) {

@@ -6,7 +6,10 @@ import com.monke.monkeybook.bean.BookInfoBean;
 import com.monke.monkeybook.bean.BookShelfBean;
 import com.monke.monkeybook.bean.BookSourceBean;
 import com.monke.monkeybook.help.FormatWebText;
-import com.monke.monkeybook.model.analyzeRule.AnalyzeElement;
+import com.monke.monkeybook.model.analyzeRule.AnalyzeByJSonPath;
+import com.monke.monkeybook.model.analyzeRule.AnalyzeByJSoup;
+import com.monke.monkeybook.model.analyzeRule.AnalyzeByXPath;
+import com.monke.monkeybook.utils.StringUtils;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -19,6 +22,8 @@ class BookInfo {
     private String tag;
     private String name;
     private BookSourceBean bookSourceBean;
+    private AnalyzeByXPath analyzeByXPath;
+    private AnalyzeByJSoup analyzeByJSoup;
 
     BookInfo(String tag, String name, BookSourceBean bookSourceBean) {
         this.tag = tag;
@@ -40,28 +45,75 @@ class BookInfo {
             }
             bookInfoBean.setNoteUrl(bookShelfBean.getNoteUrl());   //id
             bookInfoBean.setTag(tag);
-            Document doc = Jsoup.parse(s);
-            AnalyzeElement analyzeElement = new AnalyzeElement(doc, bookShelfBean.getNoteUrl());
-            if (isEmpty(bookInfoBean.getCoverUrl())) {
-                bookInfoBean.setCoverUrl(analyzeElement.getResultUrl(bookSourceBean.getRuleCoverUrl()));
-            }
-            if (isEmpty(bookInfoBean.getName())) {
-                bookInfoBean.setName(analyzeElement.getResult(bookSourceBean.getRuleBookName()));
-            }
-            if (isEmpty(bookInfoBean.getAuthor())) {
-                bookInfoBean.setAuthor(FormatWebText.getAuthor(analyzeElement.getResult(bookSourceBean.getRuleBookAuthor())));
-            }
-            bookInfoBean.setIntroduce(analyzeElement.getResult(bookSourceBean.getRuleIntroduce()));
-            String chapterUrl = analyzeElement.getResultUrl(bookSourceBean.getRuleChapterUrl());
-            if (isEmpty(chapterUrl)) {
-                bookInfoBean.setChapterUrl(bookShelfBean.getNoteUrl());
+            if (!StringUtils.isJSONType(s)) {
+                Document doc = Jsoup.parse(s);
+                analyzeByXPath = new AnalyzeByXPath(doc);
+                analyzeByJSoup = new AnalyzeByJSoup(doc, bookShelfBean.getNoteUrl());
+                if (isEmpty(bookInfoBean.getCoverUrl())) {
+                    bookInfoBean.setCoverUrl(analyzeToString(bookSourceBean.getRuleCoverUrl(), bookShelfBean.getNoteUrl()));
+                }
+                if (isEmpty(bookInfoBean.getName())) {
+                    bookInfoBean.setName(analyzeToString(bookSourceBean.getRuleBookName()));
+                }
+                if (isEmpty(bookInfoBean.getAuthor())) {
+                    bookInfoBean.setAuthor(FormatWebText.getAuthor(analyzeToString(bookSourceBean.getRuleBookAuthor())));
+                }
+                bookInfoBean.setIntroduce(analyzeToString(bookSourceBean.getRuleIntroduce()));
+                bookInfoBean.setChapterUrl(analyzeToString(bookSourceBean.getRuleChapterUrl(), bookShelfBean.getNoteUrl()));
+                if (isEmpty(bookInfoBean.getChapterUrl())) {
+                    bookInfoBean.setChapterUrl(bookShelfBean.getNoteUrl());
+                }
             } else {
-                bookInfoBean.setChapterUrl(chapterUrl);
+                AnalyzeByJSonPath analyzeByJSonPath = new AnalyzeByJSonPath(s);
+                SourceRule sourceRule;
+                if (isEmpty(bookInfoBean.getCoverUrl())) {
+                    sourceRule = new SourceRule(bookSourceBean.getRuleCoverUrl());
+                    bookInfoBean.setCoverUrl(analyzeByJSonPath.read(sourceRule.rule));
+                }
+                if (isEmpty(bookInfoBean.getName())) {
+                    sourceRule = new SourceRule(bookSourceBean.getRuleBookName());
+                    bookInfoBean.setCoverUrl(analyzeByJSonPath.read(sourceRule.rule));
+                }
+                if (isEmpty(bookInfoBean.getAuthor())) {
+                    sourceRule = new SourceRule(bookSourceBean.getRuleBookAuthor());
+                    bookInfoBean.setCoverUrl(analyzeByJSonPath.read(sourceRule.rule));
+                }
+                if (isEmpty(bookInfoBean.getIntroduce())) {
+                    sourceRule = new SourceRule(bookSourceBean.getRuleIntroduce());
+                    bookInfoBean.setCoverUrl(analyzeByJSonPath.read(sourceRule.rule));
+                }
+                sourceRule = new SourceRule(bookSourceBean.getRuleChapterUrl());
+                bookInfoBean.setChapterUrl(analyzeByJSonPath.read(sourceRule.rule));
+                if (isEmpty(bookInfoBean.getChapterUrl())) {
+                    bookInfoBean.setChapterUrl(bookShelfBean.getNoteUrl());
+                }
             }
             bookInfoBean.setOrigin(name);
             bookShelfBean.setBookInfoBean(bookInfoBean);
             e.onNext(bookShelfBean);
             e.onComplete();
         });
+    }
+
+
+    private String analyzeToString(String rule) {
+        return analyzeToString(rule, null);
+    }
+
+    private String analyzeToString(String rule, String baseUrl) {
+        SourceRule sourceRule = new SourceRule(rule);
+        String result;
+        switch (sourceRule.mode) {
+            case XPath:
+                result = analyzeByXPath.getString(sourceRule.rule, baseUrl);
+                break;
+            default:
+                if (TextUtils.isEmpty(baseUrl)) {
+                    result = analyzeByJSoup.getResult(sourceRule.rule);
+                } else {
+                    result = analyzeByJSoup.getResultUrl(sourceRule.rule);
+                }
+        }
+        return result;
     }
 }

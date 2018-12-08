@@ -12,11 +12,11 @@ import com.monke.monkeybook.utils.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 
-class PageList {
+class ChapterProvider {
     private PageLoader pageLoader;
     private ChapterContentHelp contentHelper = new ChapterContentHelp();
 
-    PageList(PageLoader pageLoader) {
+    ChapterProvider(PageLoader pageLoader) {
         this.pageLoader = pageLoader;
     }
 
@@ -25,7 +25,7 @@ class PageList {
         // 判断章节是否存在
         if (!isPrepare || pageLoader.noChapterData(chapter)) {
             if (pageLoader instanceof PageLoaderNet && !NetworkUtil.isNetWorkAvailable()) {
-                txtChapter.setStatus(Enum.PageStatus.ERROR);
+                txtChapter.setStatus(TxtChapter.Status.ERROR);
                 txtChapter.setMsg("网络连接不可用");
             }
             return txtChapter;
@@ -34,12 +34,12 @@ class PageList {
         try {
             content = pageLoader.getChapterContent(chapter);
         } catch (Exception e) {
-            txtChapter.setStatus(Enum.PageStatus.ERROR);
+            txtChapter.setStatus(TxtChapter.Status.ERROR);
             txtChapter.setMsg("读取内容出错\n" + e.getLocalizedMessage());
             return txtChapter;
         }
         if (content == null) {
-            txtChapter.setStatus(Enum.PageStatus.ERROR);
+            txtChapter.setStatus(TxtChapter.Status.ERROR);
             txtChapter.setMsg("缓存文件不存在");
             return txtChapter;
         }
@@ -152,7 +152,12 @@ class PageList {
             //重置Lines
             lines.clear();
         }
-        txtChapter.setStatus(Enum.PageStatus.FINISH);
+        if (txtChapter.getPageSize() > 0) {
+            txtChapter.setStatus(TxtChapter.Status.FINISH);
+        } else {
+            txtChapter.setStatus(TxtChapter.Status.ERROR);
+            txtChapter.setMsg("未加载到内容");
+        }
         return txtChapter;
     }
 
